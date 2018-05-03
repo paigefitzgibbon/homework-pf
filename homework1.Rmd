@@ -1,0 +1,165 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+---
+title: "Homework 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+###Import and Tidy
+Read the gazetteer data as-is (all columns; no type conversion) into a gaz_raw tibble.
+
+```{r uploaddata, message = FALSE}
+library(readr)
+library(tidyverse)
+
+
+california_raw <- read_delim("CA_Features_20180401.txt", 
+    "|", col_names = TRUE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+Copy only the following columns into a gaz tibble (you can rename them if you like):
+
+```{r COPY}
+
+california_select <- select(california_raw, FEATURE_ID, FEATURE_NAME, FEATURE_CLASS, STATE_ALPHA, COUNTY_NAME, PRIM_LAT_DEC, PRIM_LONG_DEC, SOURCE_LAT_DEC, SOURCE_LONG_DEC, ELEV_IN_M, MAP_NAME, DATE_CREATED, DATE_EDITED)
+
+```
+
+Convert the gaz columns to the appropriate type. Convert any placeholders for unknown data to NA
+
+```{r selectingdata, warning = FALSE}
+
+california_convert <- type_convert(california_select, col_types = cols(
+        DATE_CREATED = col_date(format = "%m/%d/%Y"), 
+        DATE_EDITED = col_date(format = "%m/%d/%Y"), 
+        STATE_NUMERIC = col_integer()))
+
+
+
+
+
+```
+
+Delete from gaz rows where:
+the primary latitude or longitude are unknown
+the feature is not in California
+
+```{r deleting}
+
+cali_ds <- filter(california_convert, STATE_ALPHA == "CA")
+cali_ds2 <- filter(cali_ds, PRIM_LAT_DEC != "NA", PRIM_LAT_DEC != 0, PRIM_LONG_DEC != "NA", PRIM_LONG_DEC != 0)
+
+```
+
+Write the gaz tibble to a CSV file (using "|" as a delimiter).
+```{r csv}
+
+write_delim(cali_ds2,  delim = "|", "calselections.csv")
+
+
+```
+
+
+##Analyze
+
+What is the most-frequently-occuring feature name?
+Church of Christ
+```{r name}
+
+
+cali_names <- cali_ds2 %>% 
+  group_by(FEATURE_NAME) %>% 
+  summarize(freq = n()) %>% 
+  filter(freq == max(freq))
+
+
+cali_names  
+
+```
+
+What is the least-frequently-occuring feature name?
+Isthmus, Sea
+
+```{r least}
+cali_features <- cali_ds2 %>% 
+  group_by(FEATURE_CLASS) %>% 
+  summarize(freq = n()) %>% 
+  filter(freq == min(freq))
+
+cali_features
+```
+
+What is the approximate center point of each county?
+
+```{r center}
+
+county <- cali_ds2 %>% 
+  select(COUNTY_NAME, PRIM_LAT_DEC, PRIM_LONG_DEC) %>% 
+  group_by(COUNTY_NAME) %>% 
+  summarize(averagelong = mean(PRIM_LONG_DEC), averagelat = mean(PRIM_LAT_DEC))
+  
+
+county
+```
+
+What are the fractions of the total number of features in each county that are natural? man-made?
+
+```{r fractions, warning = FALSE, message=FALSE}
+props <- cali_ds2 %>% 
+  group_by(FEATURE_CLASS) %>% 
+  select(FEATURE_CLASS) %>% 
+  summarize(freq = n())
+  
+write.csv(props, "calprops.csv")
+natural <- read_csv("calprops_edited.csv")
+natural_select <- select(natural, FEATURE_CLASS, NATURAL, MANMADE, TOTALFEATURE)
+
+
+california_props <- left_join(cali_ds2, natural_select, by = "FEATURE_CLASS")
+
+
+california_props_edit <- california_props %>% 
+  select(COUNTY_NAME, NATURAL, MANMADE, TOTALFEATURE) %>% 
+  group_by(COUNTY_NAME)
+
+
+california_props_edit2 <- california_props %>% 
+  select(COUNTY_NAME, NATURAL, MANMADE, TOTALFEATURE) %>% 
+  group_by(COUNTY_NAME) %>% 
+  summarize(totnat=sum(NATURAL), totmm=sum(MANMADE), total=sum(TOTALFEATURE))
+
+county_props <- california_props_edit2 %>% 
+  mutate(propnat = round(totnat/total, digits = 3), propmm = round(totmm/total, digits = 3))
+
+county_props_final <- county_props %>% 
+  select(COUNTY_NAME, propnat, propmm)
+
+county_props_final
+
+
+
+
+ 
+```
+
